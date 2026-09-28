@@ -39,7 +39,7 @@ def run_command(handler, resource, **params):
     result = to_text(result)
     stderr = to_text(stderr).splitlines()
 
-    if len(stderr) == 0:
+    if pipe.returncode == 0 or len(stderr) == 0:
         if not result:
             return {u"status": 200}
 

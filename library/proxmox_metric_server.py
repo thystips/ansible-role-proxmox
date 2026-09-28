@@ -62,6 +62,9 @@ options:
             - The InfluxDB access token.
             - Only necessary when using the http v2 api.
             - If the v2 compatibility api is used, use 'user:password' instead.
+            - PVE never returns the token, so changing only the token of an
+              existing server is not detected. It is applied along with any
+              other change.
     path:
         type: str
         description:
@@ -161,14 +164,11 @@ class ProxmoxMetricServer(object):
         )
 
     def lookup(self):
-        return next(
-            (
-                {"id": existing_servers.get("id")}
-                for existing_servers in self.existing_servers
-                if existing_servers.get("id") == self.id
-            ),
-            None,
-        )
+        # The server list only contains a few fields, so fetch the full config
+        try:
+            return pvesh.get(f"cluster/metrics/server/{self.id}")
+        except ProxmoxShellError as e:
+            self.module.fail_json(msg=e.message, status_code=e.status_code)
 
     def exists(self):
         return self.id in self.servers
@@ -225,6 +225,9 @@ class ProxmoxMetricServer(object):
         error = None
 
         for key in modified_server:
+            # PVE never returns the token, so it can't be compared
+            if key == "token":
+                continue
             if key not in existing_servers:  # type: ignore
                 updated_fields.append(key)
             else:
@@ -390,10 +393,7 @@ def main():
                 changed = True
                 result["updated_fields"] = updated_fields
 
-    # Very gross hack to ignore the error message when Proxmox tries to remove non-existent credentials file
-    # See : https://forum.proxmox.com/threads/interface-comes-up-with-all-question-marks.83287/post-382099
-    # TODO: Check if the error message is still appearing in version < 7.4-17
-    if error is not None and not error.startswith(f"removing {server.type} credentials file"):
+    if error is not None:
         module.fail_json(name=server.id, msg=error)
 
     result["changed"] = changed
