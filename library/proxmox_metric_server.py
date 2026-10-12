@@ -62,7 +62,16 @@ options:
             - The InfluxDB access token.
             - Only necessary when using the http v2 api.
             - If the v2 compatibility api is used, use 'user:password' instead.
-            - PVE never returns the token, so a change to it alone is not detected.
+            - PVE never returns the token, so a change to it alone is not
+              detected (see 'force_token').
+    force_token:
+        type: bool
+        default: false
+        description:
+            - Re-apply the token even when no other option changed.
+            - PVE never returns the token, so a token-only change cannot be
+              detected; set this to true to force it (the task then reports
+              changed on every run).
     path:
         type: str
         description:
@@ -139,6 +148,7 @@ class ProxmoxMetricServer(object):
         self.organization = module.params["organization"]
         self.bucket = module.params["bucket"]
         self.token = module.params["token"]
+        self.force_token = module.params["force_token"]
         self.path = module.params["path"]
         self.api_path_prefix = module.params["api_path_prefix"]
         self.timeout = module.params["timeout"]
@@ -232,8 +242,11 @@ class ProxmoxMetricServer(object):
         error = None
 
         for key, new_value in modified_server.items():
-            # The token is write-only, PVE never returns it.
             if key == "token":
+                # PVE never returns the token, so it cannot be diffed. Re-apply
+                # it only when explicitly forced.
+                if self.force_token:
+                    updated_fields.append(key)
                 continue
             if key in existing_server:
                 old_value = existing_server[key]
@@ -279,6 +292,7 @@ def main():
         organization=dict(type="str"),
         bucket=dict(type="str"),
         token=dict(type="str"),
+        force_token=dict(type="bool", default=False),
         path=dict(type="str"),
         api_path_prefix=dict(type="str"),
         timeout=dict(type="int"),
