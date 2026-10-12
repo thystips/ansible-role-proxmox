@@ -915,7 +915,7 @@ pve_metric_servers:
 - `disable`: (optional) Disable the metric server. Default is `false`.
 - `organization`: (optional) Organization name. Available only for influxdb with the http v2 API.
 - `bucket`: (optional) Bucket name for influxdb. Useful only with the http v2 API or compatible.
-- `token`: (optional) InfluxDB access token. Required only when using the http v2 API.
+- `token`: (optional) InfluxDB access token. Required only when using the http v2 API. PVE never returns it, so a change affecting only the token of an existing server is not detected (another field must change, or the server must be recreated).
 - `path`: (optional) Graphite root path. Available only for graphite.
 - `api_path_prefix`: (optional) API path prefix inserted between `<host>:<port>/` and `/api2/`. Useful if the InfluxDB service is running behind a reverse proxy. Available only for influxdb with the http v2 API.
 - `timeout`: (optional) Timeout in seconds. Available only for influxdb with the http v2 API or Graphite TCP socket.

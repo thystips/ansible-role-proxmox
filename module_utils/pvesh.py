@@ -39,7 +39,8 @@ def run_command(handler, resource, **params):
     result = to_text(result)
     stderr = to_text(stderr).splitlines()
 
-    if len(stderr) == 0:
+    # pvesh may warn on stderr while still succeeding, trust the exit code.
+    if pipe.returncode == 0:
         if not result:
             return {u"status": 200}
 
