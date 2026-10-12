@@ -140,6 +140,18 @@ pve_storages: # This should create 2 different storages.
     path: /rpool/zfs2
 pve_zfs_create_volumes:
   - rpool/zfs2
+pve_metric_servers:
+  - id: influxdb1
+    server: 127.0.0.1
+    port: 8089
+    type: influxdb
+    protocol: udp
+  - id: graphite1
+    server: 127.0.0.1
+    port: 2003
+    type: graphite
+    protocol: udp
+    path: proxmox
 
 ssl_directory: /home/travis/ssl/
 ssl_ca_key_path: "{{ ssl_directory }}/test-ca.key"

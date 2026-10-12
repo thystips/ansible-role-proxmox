@@ -62,6 +62,16 @@ options:
             - The InfluxDB access token.
             - Only necessary when using the http v2 api.
             - If the v2 compatibility api is used, use 'user:password' instead.
+            - PVE never returns the token, so a change to it alone is not
+              detected (see 'force_token').
+    force_token:
+        type: bool
+        default: false
+        description:
+            - Re-apply the token even when no other option changed.
+            - PVE never returns the token, so a token-only change cannot be
+              detected; set this to true to force it (the task then reports
+              changed on every run).
     path:
         type: str
         description:
@@ -138,6 +148,7 @@ class ProxmoxMetricServer(object):
         self.organization = module.params["organization"]
         self.bucket = module.params["bucket"]
         self.token = module.params["token"]
+        self.force_token = module.params["force_token"]
         self.path = module.params["path"]
         self.api_path_prefix = module.params["api_path_prefix"]
         self.timeout = module.params["timeout"]
@@ -161,14 +172,11 @@ class ProxmoxMetricServer(object):
         )
 
     def lookup(self):
-        return next(
-            (
-                {"id": existing_servers.get("id")}
-                for existing_servers in self.existing_servers
-                if existing_servers.get("id") == self.id
-            ),
-            None,
-        )
+        # The index only exposes a few fields, fetch the full config instead.
+        try:
+            return pvesh.get(f"cluster/metrics/server/{self.id}")
+        except ProxmoxShellError as e:
+            self.module.fail_json(msg=e.message, status_code=e.status_code)
 
     def exists(self):
         return self.id in self.servers
@@ -218,25 +226,38 @@ class ProxmoxMetricServer(object):
         except ProxmoxShellError as e:
             return (False, e.message)
 
+    @staticmethod
+    def normalize_value(value):
+        # PVE and pvesh encode values differently, compare canonical strings.
+        if isinstance(value, bool):
+            value = int(value)
+        if isinstance(value, list):
+            value = ",".join(sorted(str(item) for item in value))
+        return str(value)
+
     def modify_server(self):
-        existing_servers = self.lookup()
+        existing_server = self.lookup()
         modified_server = self.prepare_server_args(create=False)
         updated_fields = []
         error = None
 
-        for key in modified_server:
-            if key not in existing_servers:  # type: ignore
-                updated_fields.append(key)
-            else:
-                new_value = modified_server.get(key)
-                old_value = existing_servers.get(key)  # type: ignore
-                if isinstance(old_value, list):
-                    old_value = ",".join(sorted(old_value))
-                if isinstance(new_value, list):
-                    new_value = ",".join(sorted(new_value))
-
-                if new_value != old_value:
+        for key, new_value in modified_server.items():
+            if key == "token":
+                # PVE never returns the token, so it cannot be diffed. Re-apply
+                # it only when explicitly forced.
+                if self.force_token:
                     updated_fields.append(key)
+                continue
+            if key in existing_server:
+                old_value = existing_server[key]
+            elif key == "disable":
+                # PVE omits 'disable' from status.cfg when it is 0.
+                old_value = 0
+            else:
+                updated_fields.append(key)
+                continue
+            if self.normalize_value(new_value) != self.normalize_value(old_value):
+                updated_fields.append(key)
 
         if self.module.check_mode:
             self.module.exit_json(
@@ -271,6 +292,7 @@ def main():
         organization=dict(type="str"),
         bucket=dict(type="str"),
         token=dict(type="str"),
+        force_token=dict(type="bool", default=False),
         path=dict(type="str"),
         api_path_prefix=dict(type="str"),
         timeout=dict(type="int"),
@@ -390,10 +412,7 @@ def main():
                 changed = True
                 result["updated_fields"] = updated_fields
 
-    # Very gross hack to ignore the error message when Proxmox tries to remove non-existent credentials file
-    # See : https://forum.proxmox.com/threads/interface-comes-up-with-all-question-marks.83287/post-382099
-    # TODO: Check if the error message is still appearing in version < 7.4-17
-    if error is not None and not error.startswith(f"removing {server.type} credentials file"):
+    if error is not None:
         module.fail_json(name=server.id, msg=error)
 
     result["changed"] = changed

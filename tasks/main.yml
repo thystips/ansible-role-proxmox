@@ -397,6 +397,7 @@
     organization: "{{ item.organization | default(omit) }}"
     bucket: "{{ item.bucket | default(omit) }}"
     token: "{{ item.token | default(omit) }}"
+    force_token: "{{ item.force_token | default(omit) }}"
     path: "{{ item.path | default(omit) }}"
     api_path_prefix: "{{ item.api_path_prefix | default(omit) }}"
     timeout: "{{ item.timeout | default(omit) }}"
